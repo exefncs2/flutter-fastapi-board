@@ -1,25 +1,13 @@
-"""FastAPI backend for Flutter FastAPI Board.
-
-Provides QR-code session authentication over WebSocket (with HTTP polling
-fallback), JWT bearer authentication, and post/comment REST endpoints.
-"""
+"""FastAPI 呼叫進入點：負責 HTTP / WebSocket 路由對應與背景任務生命週期。"""
 
 from __future__ import annotations
 
 import asyncio
-import base64
+from contextlib import asynccontextmanager, suppress
 import json
 import logging
-import os
-import uuid
-from contextlib import asynccontextmanager, suppress
-from datetime import datetime, timedelta, timezone
-from io import BytesIO
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-import jwt
-import qrcode
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,7 +15,23 @@ from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
+
+from config import (
+    AppConfig,
+    SESSION_CLEANUP_INTERVAL_SECONDS,
+    STATIC_DIR,
+    TEMPLATES_DIR,
+)
+from service import (
+    BoardService,
+    Comment,
+    CommentCreate,
+    LoginResponse,
+    Post,
+    PostCreate,
+    SessionRequest,
+    generate_qr_code_data_uri,
+)
 
 load_dotenv()
 
@@ -37,155 +41,59 @@ logging.basicConfig(
 )
 logger = logging.getLogger("flutter_fastapi_board")
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parent
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-insecure-secret-change-me")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-SESSION_TTL_MINUTES = int(os.getenv("SESSION_TTL_MINUTES", "15"))
-
-# ---------------------------------------------------------------------------
-# In-memory storage (replace with PostgreSQL / Redis in production)
-# ---------------------------------------------------------------------------
-USERS: Dict[str, Dict[str, str]] = {
-    "user1": {"username": "user1", "full_name": "Demo User", "email": "user1@example.com"}
-}
-active_sessions: Dict[str, Dict[str, object]] = {}
+config = AppConfig.from_env()
+board_service = BoardService(config)
 connected_clients: Dict[str, WebSocket] = {}
-POSTS: List["Post"] = []
-
-
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
-class Comment(BaseModel):
-    id: int
-    username: str
-    content: str
-    timestamp: str
-
-
-class CommentCreate(BaseModel):
-    content: str = Field(..., min_length=1, max_length=500)
-
-
-class Post(BaseModel):
-    id: int
-    username: str
-    content: str
-    timestamp: str
-    comments: List[Comment] = Field(default_factory=list)
-
-
-class PostCreate(BaseModel):
-    content: str = Field(..., min_length=1, max_length=2000)
-
-
-class SessionRequest(BaseModel):
-    session_id: str
-
-
-class LoginResponse(BaseModel):
-    username: str
-    token: str
-
-
-# ---------------------------------------------------------------------------
-# Auth & QR Helpers
-# ---------------------------------------------------------------------------
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def generate_qr_code(data: str) -> str:
-    """Encode payload string into a base64 PNG data URI."""
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
-        border=4,
-    )
-    qr.add_data(data)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    buffer = BytesIO()
-    img.save(buffer)
-    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = utc_now() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode["exp"] = expire
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
 def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
-    """Validate Bearer JWT and return the authenticated username."""
+    """驗證 Bearer Token 並回傳當前使用者名稱。"""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: Optional[str] = payload.get("sub")
-        if not username:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="無效的令牌")
-        return username
-    except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="無效或已過期的令牌") from exc
+        return board_service.verify_access_token(token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
 
 
-# ---------------------------------------------------------------------------
-# Background Session Cleanup & App Lifespan
-# ---------------------------------------------------------------------------
-async def cleanup_expired_sessions() -> None:
-    """Periodically evict expired QR login sessions and close stale sockets."""
-    ttl = timedelta(minutes=SESSION_TTL_MINUTES)
+async def _cleanup_loop() -> None:
+    """背景定時清除過期會話並關閉對應的 WebSocket 連線。"""
     while True:
-        now = utc_now()
-        expired_ids = [
-            sid
-            for sid, sess in list(active_sessions.items())
-            if isinstance(sess.get("created_at"), datetime) and now - sess["created_at"] > ttl
-        ]
+        expired_ids = board_service.purge_expired_sessions()
         for sid in expired_ids:
-            active_sessions.pop(sid, None)
             client = connected_clients.pop(sid, None)
             if client is not None:
                 with suppress(Exception):
                     await client.close()
         if expired_ids:
-            logger.info("Cleaned up %d expired QR session(s)", len(expired_ids))
-        await asyncio.sleep(60)
+            logger.info("已清理 %d 筆過期 QR 登入會話", len(expired_ids))
+        await asyncio.sleep(SESSION_CLEANUP_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    task = asyncio.create_task(cleanup_expired_sessions())
-    logger.info("QR session cleanup background task started")
+    """管理背景清理協程隨應用程式啟動與優雅關閉。"""
+    cleanup_task = asyncio.create_task(_cleanup_loop())
+    logger.info("QR 會話背景清理任務已啟動")
     try:
         yield
     finally:
-        task.cancel()
+        cleanup_task.cancel()
         with suppress(asyncio.CancelledError):
-            await task
-        logger.info("QR session cleanup background task stopped")
+            await cleanup_task
+        logger.info("QR 會話背景清理任務已停止")
 
 
-# ---------------------------------------------------------------------------
-# FastAPI App Initialization
-# ---------------------------------------------------------------------------
 app = FastAPI(
     title="Flutter FastAPI Board",
-    description="QR Code authentication & real-time bulletin board API",
+    description="QR Code 即時認證登入與留言評論系統 API",
     version="1.0.0",
     lifespan=lifespan,
 )
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -195,113 +103,105 @@ app.add_middleware(
 )
 
 
-# ---------------------------------------------------------------------------
-# Web & WebSocket Routes
-# ---------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
-async def login_page(request: Request):
-    session_id = str(uuid.uuid4())
-    active_sessions[session_id] = {
-        "created_at": utc_now(),
-        "status": "pending",
-        "user": None,
-    }
+async def login_page(request: Request) -> HTMLResponse:
+    """渲染 QR Code 登入頁面並建立待掃描會話。"""
+    session_id = board_service.create_qr_session()
     qr_payload = json.dumps({"session_id": session_id})
     return templates.TemplateResponse(
         "login.html",
         {
             "request": request,
-            "qr_code": generate_qr_code(qr_payload),
+            "qr_code": generate_qr_code_data_uri(qr_payload),
             "session_id": session_id,
         },
     )
 
 
 @app.websocket("/ws/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, session_id: str):
+async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
+    """維持前端 WebSocket 連線並即時推送 QR 登入狀態變更。"""
     await websocket.accept()
-    if session_id not in active_sessions:
-        await websocket.close(code=1008, reason="Session 不存在")
+    if board_service.get_session(session_id) is None:
+        await websocket.close(code=1008, reason="會話不存在")
         return
 
     connected_clients[session_id] = websocket
     try:
         while True:
             await websocket.receive_text()
-            session = active_sessions.get(session_id)
-            if not session:
+            session = board_service.get_session(session_id)
+            if session is None:
                 await websocket.send_json({"status": "expired"})
                 break
-            if session["status"] == "authenticated":
-                token = create_access_token({"sub": session["user"]})
+            if session.status == "authenticated" and session.user:
+                token = board_service.create_access_token(session.user)
                 await websocket.send_json(
-                    {"status": "authenticated", "user": session["user"], "token": token}
+                    {"status": "authenticated", "user": session.user, "token": token}
                 )
             else:
-                await websocket.send_json({"status": session["status"]})
+                await websocket.send_json({"status": session.status})
     except WebSocketDisconnect:
         connected_clients.pop(session_id, None)
 
 
-# ---------------------------------------------------------------------------
-# Authentication API
-# ---------------------------------------------------------------------------
 @app.post("/api/qr-login", response_model=LoginResponse)
-async def qr_login(payload: SessionRequest):
-    session = active_sessions.get(payload.session_id)
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session 不存在或已過期")
+async def qr_login(payload: SessionRequest) -> LoginResponse:
+    """處理行動端掃碼確認，更新會話狀態並即時通知網頁端。"""
+    try:
+        login_result = board_service.authenticate_session(payload.session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
-    username = "user1"
-    session.update({"status": "authenticated", "user": username, "created_at": utc_now()})
-    token = create_access_token({"sub": username}, expires_delta=timedelta(hours=1))
-
-    ws = connected_clients.get(payload.session_id)
-    if ws is not None:
+    client = connected_clients.get(payload.session_id)
+    if client is not None:
         try:
-            await ws.send_json({"status": "authenticated", "user": username, "token": token})
+            await client.send_json(
+                {
+                    "status": "authenticated",
+                    "user": login_result.username,
+                    "token": login_result.token,
+                }
+            )
         except Exception as exc:
-            logger.warning("WebSocket notification failed for %s: %s", payload.session_id, exc)
+            logger.warning("推送 WebSocket 登入通知失敗（session=%s）：%s", payload.session_id, exc)
 
-    return LoginResponse(username=username, token=token)
+    return login_result
 
 
 @app.post("/api/logout")
-async def logout(payload: SessionRequest):
-    active_sessions.pop(payload.session_id, None)
-    ws = connected_clients.pop(payload.session_id, None)
-    if ws is not None:
+async def logout(payload: SessionRequest) -> dict[str, str]:
+    """登出並移除對應會話。"""
+    board_service.remove_session(payload.session_id)
+    client = connected_clients.pop(payload.session_id, None)
+    if client is not None:
         with suppress(Exception):
-            await ws.send_json({"status": "logout", "message": "已登出"})
+            await client.send_json({"status": "logout", "message": "已登出"})
     return {"status": "success", "message": "已登出"}
 
 
 @app.get("/api/check-session/{session_id}")
-async def check_session(session_id: str):
-    session = active_sessions.get(session_id)
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session 不存在或已過期")
-    return {"status": session["status"], "user": session.get("user")}
+async def check_session(session_id: str) -> dict[str, str | None]:
+    """提供 WebSocket 異常時的 HTTP 輪詢狀態查詢介面。"""
+    session = board_service.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="會話不存在或已過期")
+    return {"status": session.status, "user": session.user}
 
 
-# ---------------------------------------------------------------------------
-# Posts & Comments API
-# ---------------------------------------------------------------------------
 @app.get("/api/posts", response_model=List[Post])
-async def get_posts(_username: str = Depends(get_current_user)):
-    return POSTS
+async def get_posts(_username: str = Depends(get_current_user)) -> List[Post]:
+    """取得所有貼文清單。"""
+    return board_service.list_posts()
 
 
 @app.post("/api/posts", response_model=Post, status_code=status.HTTP_201_CREATED)
-async def create_post(post: PostCreate, username: str = Depends(get_current_user)):
-    new_post = Post(
-        id=len(POSTS) + 1,
-        username=username,
-        content=post.content,
-        timestamp=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
-    )
-    POSTS.insert(0, new_post)
-    return new_post
+async def create_post(
+    post: PostCreate,
+    username: str = Depends(get_current_user),
+) -> Post:
+    """建立新貼文。"""
+    return board_service.create_post(username=username, content=post.content)
 
 
 @app.post("/api/posts/{post_id}/comments", response_model=Comment, status_code=status.HTTP_201_CREATED)
@@ -309,19 +209,16 @@ async def add_comment(
     post_id: int,
     comment: CommentCreate,
     username: str = Depends(get_current_user),
-):
-    post = next((p for p in POSTS if p.id == post_id), None)
-    if not post:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="貼文不存在")
-
-    new_comment = Comment(
-        id=len(post.comments) + 1,
-        username=username,
-        content=comment.content,
-        timestamp=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
-    )
-    post.comments.append(new_comment)
-    return new_comment
+) -> Comment:
+    """於指定貼文新增留言。"""
+    try:
+        return board_service.add_comment(
+            post_id=post_id,
+            username=username,
+            content=comment.content,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 if __name__ == "__main__":
