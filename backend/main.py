@@ -127,9 +127,9 @@ async def login_page(request: Request) -> HTMLResponse:
     session_id = board_service.create_qr_session()
     qr_payload = json.dumps({"session_id": session_id})
     return templates.TemplateResponse(
-        "login.html",
-        {
-            "request": request,
+        request=request,
+        name="login.html",
+        context={
             "qr_code": generate_qr_code_data_uri(qr_payload),
             "session_id": session_id,
         },
