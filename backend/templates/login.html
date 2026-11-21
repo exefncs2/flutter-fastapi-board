@@ -17,7 +17,7 @@
     
     <div id="userInfo" class="user-info" style="display: none;">
         <h2>登入成功！</h2>
-        <p>歡迎回來，<span id="username">用戶</span></p>
+        <p>歡迎回來，<span id="username">使用者</span></p>
     </div>
 </div>
 {% endblock %}
@@ -127,11 +127,11 @@
     
     // 顯示會話過期
     function showExpired() {
-        document.getElementById('statusText').textContent = '會話已過期，請刷新頁面';
+        document.getElementById('statusText').textContent = '會話已過期，請重新整理頁面';
         document.getElementById('statusContainer').className = 'status-container expired';
     }
     
-    // 頁面加載完成後執行
+    // 頁面載入完成後執行
     document.addEventListener('DOMContentLoaded', function() {
         // 嘗試建立 WebSocket 連接
         connectWebSocket();

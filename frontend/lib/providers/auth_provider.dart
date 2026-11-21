@@ -4,20 +4,20 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
 
-/// 身份驗證提供者，管理用戶登入狀態和相關操作
+/// 身份驗證提供者，管理使用者登入狀態和相關操作
 class AuthProvider with ChangeNotifier {
-  User? _user;  // 當前登入用戶
-  bool _isLoading = false;  // 加載狀態標誌
-  String? _error;  // 錯誤信息
+  User? _user;  // 當前登入使用者
+  bool _isLoading = false;  // 載入狀態標誌
+  String? _error;  // 錯誤資訊
   
   // 服務和存儲實例
   final ApiService _apiService;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  /// 構造函數，接收 API 服務
+  /// 構造函式，接收 API 服務
   AuthProvider(this._apiService);
 
-  // 獲取器
+  // 取得器
   User? get user => _user;
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -35,7 +35,7 @@ class AuthProvider with ChangeNotifier {
     try {
       print('發送登入請求...');
       final user = await _apiService.loginWithQrSession(sessionId);
-      print('收到伺服器響應: ${user.username}');
+      print('收到伺服器回應: ${user.username}');
       _user = user;
       
       // 將令牌存儲到安全存儲中
@@ -69,7 +69,7 @@ class AuthProvider with ChangeNotifier {
       return false;  // 沒有存儲的令牌
     }
 
-    // 設置加載狀態
+    // 設置載入狀態
     _isLoading = true;
     notifyListeners();
 
@@ -77,7 +77,7 @@ class AuthProvider with ChangeNotifier {
       // 設置 API 服務的令牌
       _apiService.setToken(token);
       
-      // 使用令牌獲取用戶信息
+      // 使用令牌取得使用者資訊
       final user = await _apiService.getUserInfo();
       _user = user;
       
@@ -97,9 +97,9 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// 登出當前用戶
+  /// 登出當前使用者
   /// 
-  /// 清除存儲的令牌和用戶信息
+  /// 清除存儲的令牌和使用者資訊
   Future<void> logout() async {
     print('執行登出操作');
     // 從安全存儲中刪除令牌
@@ -108,9 +108,9 @@ class AuthProvider with ChangeNotifier {
     // 清除 API 服務中的令牌
     _apiService.clearToken();
     
-    // 清除用戶信息並通知監聽者
+    // 清除使用者資訊並通知監聽者
     _user = null;
     notifyListeners();
-    print('用戶已登出');
+    print('使用者已登出');
   }
 }

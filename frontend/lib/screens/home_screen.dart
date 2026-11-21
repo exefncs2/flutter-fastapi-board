@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import '../providers/post_provider.dart';  // 添加此導入
-import '../models/post.dart';  // 添加此導入
+import '../providers/post_provider.dart';  // 新增此匯入
+import '../models/post.dart';  // 新增此匯入
 
 /// 主頁面，顯示留言板
 class HomeScreen extends StatefulWidget {
@@ -20,7 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // 頁面初始化時加載留言
+    // 頁面初始化時載入留言
     Future.microtask(() => 
       Provider.of<PostProvider>(context, listen: false).loadPosts()
     );
@@ -43,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text('留言板'),
         actions: [
-          // 用戶信息顯示
+          // 使用者資訊顯示
           Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -77,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               );
               
-              // 如果用戶確認，則執行登出
+              // 如果使用者確認，則執行登出
               if (confirm == true) {
                 await authProvider.logout();
                 Navigator.of(context).pushReplacementNamed('/login');
@@ -137,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
             // 留言列表
             Expanded(
               child: postProvider.isLoading && postProvider.posts.isEmpty
-                ? Center(child: CircularProgressIndicator())  // 加載中
+                ? Center(child: CircularProgressIndicator())  // 載入中
                 : postProvider.posts.isEmpty
                   ? Center(child: Text('還沒有任何留言，來發布第一條吧！'))  // 空列表
                   : ListView.separated(
@@ -170,11 +170,11 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 留言頭部：用戶名和時間
+            // 留言頭部：使用者名稱和時間
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // 用戶頭像和名稱
+                // 使用者頭像和名稱
                 Row(
                   children: [
                     CircleAvatar(
@@ -231,14 +231,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ...post.comments.map((comment) => _buildCommentItem(comment)).toList(),
             ],
             
-            // 添加評論
+            // 新增評論
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: commentController,
                     decoration: InputDecoration(
-                      hintText: '添加評論...',
+                      hintText: '新增評論...',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),

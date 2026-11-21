@@ -6,7 +6,7 @@ class Post {
   final String timestamp;
   final List<Comment> comments;
 
-  /// 構造函數，初始化留言屬性
+  /// 構造函式，初始化留言屬性
   Post({
     required this.id,
     required this.username,
@@ -15,7 +15,7 @@ class Post {
     this.comments = const [],
   });
 
-  /// 從 JSON 創建 Post 對象的工廠方法
+  /// 從 JSON 建立 Post 物件的工廠方法
   factory Post.fromJson(Map<String, dynamic> json) {
     return Post(
       id: json['id'],
@@ -29,7 +29,7 @@ class Post {
     );
   }
 
-  /// 將 Post 對象轉換為 JSON 的方法
+  /// 將 Post 物件轉換為 JSON 的方法
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -48,7 +48,7 @@ class Comment {
   final String content;
   final String timestamp;
 
-  /// 構造函數，初始化評論屬性
+  /// 構造函式，初始化評論屬性
   Comment({
     required this.id,
     required this.username,
@@ -56,7 +56,7 @@ class Comment {
     required this.timestamp,
   });
 
-  /// 從 JSON 創建 Comment 對象的工廠方法
+  /// 從 JSON 建立 Comment 物件的工廠方法
   factory Comment.fromJson(Map<String, dynamic> json) {
     return Comment(
       id: json['id'],
@@ -66,7 +66,7 @@ class Comment {
     );
   }
 
-  /// 將 Comment 對象轉換為 JSON 的方法
+  /// 將 Comment 物件轉換為 JSON 的方法
   Map<String, dynamic> toJson() {
     return {
       'id': id,

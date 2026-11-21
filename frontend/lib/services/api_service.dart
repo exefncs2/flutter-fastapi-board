@@ -11,7 +11,7 @@ class ApiService {
   // 存儲身份驗證令牌
   String? token;
 
-  /// 構造函數，可以設置初始 URL
+  /// 構造函式，可以設置初始 URL
   ApiService({String? initialUrl}) {
     if (initialUrl != null) {
       baseUrl = initialUrl;
@@ -51,7 +51,7 @@ class ApiService {
       body: jsonEncode({'session_id': sessionId}),
     );
     
-    print('收到響應，狀態碼: ${response.statusCode}');
+    print('收到回應，狀態碼: ${response.statusCode}');
     if (response.statusCode == 200) {
       final userData = jsonDecode(utf8.decode(response.bodyBytes));
       // 保存令牌以供後續請求使用
@@ -66,7 +66,7 @@ class ApiService {
     }
   }
 
-  /// 獲取當前登入用戶的信息
+  /// 取得當前登入使用者的資訊
   Future<User> getUserInfo() async {
     _checkTokenAndUrl();
     
@@ -81,15 +81,15 @@ class ApiService {
     if (response.statusCode == 200) {
       return User.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
     } else {
-      throw Exception('獲取用戶信息失敗: ${response.body}');
+      throw Exception('取得使用者資訊失敗: ${response.body}');
     }
   }
 
-  /// 獲取所有帖子
+  /// 取得所有貼文
   Future<List<Post>> getPosts() async {
     _checkTokenAndUrl();
     
-    print('獲取帖子列表');
+    print('取得貼文列表');
     final response = await http.get(
       Uri.parse('$baseUrl/api/posts'),
       headers: {
@@ -99,20 +99,20 @@ class ApiService {
     );
     
     if (response.statusCode == 200) {
-      print('成功獲取帖子列表');
+      print('成功取得貼文列表');
       List<dynamic> jsonResponse = jsonDecode(utf8.decode(response.bodyBytes));
       return jsonResponse.map((post) => Post.fromJson(post)).toList();
     } else {
-      print('獲取帖子失敗: ${response.body}');
-      throw Exception('獲取帖子失敗: ${response.body}');
+      print('取得貼文失敗: ${response.body}');
+      throw Exception('取得貼文失敗: ${response.body}');
     }
   }
 
-  /// 創建新帖子
+  /// 建立新貼文
   Future<Post> createPost(String content) async {
     _checkTokenAndUrl();
     
-    print('創建新帖子');
+    print('建立新貼文');
     final response = await http.post(
       Uri.parse('$baseUrl/api/posts'),
       headers: {
@@ -123,19 +123,19 @@ class ApiService {
     );
     
     if (response.statusCode == 201) {
-      print('帖子創建成功');
+      print('貼文建立成功');
       return Post.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
     } else {
-      print('創建帖子失敗: ${response.body}');
-      throw Exception('創建帖子失敗: ${response.body}');
+      print('建立貼文失敗: ${response.body}');
+      throw Exception('建立貼文失敗: ${response.body}');
     }
   }
 
-  /// 添加評論到帖子
+  /// 新增評論到貼文
   Future<Comment> addComment(int postId, String content) async {
     _checkTokenAndUrl();
     
-    print('添加評論到帖子 $postId');
+    print('新增評論到貼文 $postId');
     final response = await http.post(
       Uri.parse('$baseUrl/api/posts/$postId/comments'),
       headers: {
@@ -146,11 +146,11 @@ class ApiService {
     );
     
     if (response.statusCode == 201) {
-      print('評論添加成功');
+      print('評論新增成功');
       return Comment.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
     } else {
-      print('添加評論失敗: ${response.body}');
-      throw Exception('添加評論失敗: ${response.body}');
+      print('新增評論失敗: ${response.body}');
+      throw Exception('新增評論失敗: ${response.body}');
     }
   }
 

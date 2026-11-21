@@ -89,7 +89,7 @@ class _InitialScreenState extends State<InitialScreen> {
 
   /// 檢查自動登入
   void _checkAutoLogin() async {
-    // 獲取認證提供者
+    // 取得認證提供者
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     
     // 嘗試自動登入

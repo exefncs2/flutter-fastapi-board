@@ -4,7 +4,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?logo=fastapi&logoColor=white)
 ![WebSocket](https://img.shields.io/badge/Realtime-WebSocket%20%2B%20JWT-4A154B)
 
-整合 **QR Code 掃描即時登入**（WebSocket＋輪詢備援）與 **JWT 留言評論功能** 的跨平台行動應用範例。後端採**三檔分離架構**（設定 / 核心服務 / 路由進入點），前端使用 Flutter 支援 Android 與 iOS。
+整合 **QR Code 掃描即時登入**（WebSocket＋輪詢備援）與 **JWT 留言評論功能** 的跨平臺行動應用範例。後端採**三檔分離架構**（設定 / 核心服務 / 路由進入點），前端使用 Flutter 支援 Android 與 iOS。
 
 ## 專案結構
 
@@ -18,7 +18,7 @@ flutter-fastapi-board/
 │   ├── static/          # 樣式表
 │   ├── .env.example     # 環境變數範本
 │   └── requirements.txt # 精簡修補版後端依賴
-└── frontend/            # Flutter 跨平台行動端專案
+└── frontend/            # Flutter 跨平臺行動端專案
 ```
 
 ## 快速開始
