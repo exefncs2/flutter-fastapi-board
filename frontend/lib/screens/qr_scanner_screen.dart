@@ -38,7 +38,7 @@ class QrScannerScreen extends StatelessWidget {
             flex: 1,
             child: Center(
               child: Text(
-                '請將攝像頭對準網頁上的 QR 碼',
+                '請將鏡頭對準網頁上的 QR 碼',
                 style: TextStyle(fontSize: 16),
               ),
             ),

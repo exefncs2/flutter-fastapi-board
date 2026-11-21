@@ -30,7 +30,7 @@
     let checkInterval;
     let isAuthenticated = false;
     
-    // 建立 WebSocket 連接
+    // 建立 WebSocket 連線
     function connectWebSocket() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws/${sessionId}`;
@@ -38,14 +38,14 @@
         socket = new WebSocket(wsUrl);
         
         socket.onopen = function() {
-            console.log("WebSocket 連接已建立");
+            console.log("WebSocket 連線已建立");
             // 發送初始檢查
             socket.send('check');
         };
         
         socket.onmessage = function(event) {
             const data = JSON.parse(event.data);
-            console.log("收到消息:", data);
+            console.log("收到訊息:", data);
             
             if (data.status === "authenticated") {
                 showAuthenticated(data.user);
@@ -55,7 +55,7 @@
         };
         
         socket.onclose = function() {
-            console.log("WebSocket 連接已關閉");
+            console.log("WebSocket 連線已關閉");
             // 如果還沒有認證且不是因為過期，則使用輪詢作為後備
             if (!isAuthenticated) {
                 startPolling();
@@ -133,10 +133,10 @@
     
     // 頁面載入完成後執行
     document.addEventListener('DOMContentLoaded', function() {
-        // 嘗試建立 WebSocket 連接
+        // 嘗試建立 WebSocket 連線
         connectWebSocket();
         
-        // 如果 3 秒後 WebSocket 還未建立連接，則改用輪詢
+        // 如果 3 秒後 WebSocket 還未建立連線，則改用輪詢
         setTimeout(function() {
             if (!socket || socket.readyState !== WebSocket.OPEN) {
                 startPolling();
