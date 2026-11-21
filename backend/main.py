@@ -16,22 +16,40 @@ from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from config import (
-    AppConfig,
-    SESSION_CLEANUP_INTERVAL_SECONDS,
-    STATIC_DIR,
-    TEMPLATES_DIR,
-)
-from service import (
-    BoardService,
-    Comment,
-    CommentCreate,
-    LoginResponse,
-    Post,
-    PostCreate,
-    SessionRequest,
-    generate_qr_code_data_uri,
-)
+try:
+    from backend.config import (
+        AppConfig,
+        SESSION_CLEANUP_INTERVAL_SECONDS,
+        STATIC_DIR,
+        TEMPLATES_DIR,
+    )
+    from backend.service import (
+        BoardService,
+        Comment,
+        CommentCreate,
+        LoginResponse,
+        Post,
+        PostCreate,
+        SessionRequest,
+        generate_qr_code_data_uri,
+    )
+except ModuleNotFoundError:
+    from config import (
+        AppConfig,
+        SESSION_CLEANUP_INTERVAL_SECONDS,
+        STATIC_DIR,
+        TEMPLATES_DIR,
+    )
+    from service import (
+        BoardService,
+        Comment,
+        CommentCreate,
+        LoginResponse,
+        Post,
+        PostCreate,
+        SessionRequest,
+        generate_qr_code_data_uri,
+    )
 
 load_dotenv()
 
@@ -187,6 +205,13 @@ async def check_session(session_id: str) -> dict[str, str | None]:
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="會話不存在或已過期")
     return {"status": session.status, "user": session.user}
+
+
+@app.get("/api/users/me", response_model=LoginResponse)
+async def get_current_user_info(token: str = Depends(oauth2_scheme)) -> LoginResponse:
+    """驗證既有 Bearer Token 並回傳目前使用者資訊，供 Flutter 端自動登入使用。"""
+    username = get_current_user(token)
+    return LoginResponse(username=username, token=token)
 
 
 @app.get("/api/posts", response_model=List[Post])

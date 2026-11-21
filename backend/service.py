@@ -13,7 +13,10 @@ import jwt
 import qrcode
 from pydantic import BaseModel, Field
 
-from config import AppConfig, DEFAULT_DEMO_USERNAME
+try:
+    from backend.config import AppConfig, DEFAULT_DEMO_USERNAME
+except ModuleNotFoundError:
+    from config import AppConfig, DEFAULT_DEMO_USERNAME
 
 
 # ---------------------------------------------------------------------------
